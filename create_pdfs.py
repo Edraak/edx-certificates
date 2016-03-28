@@ -159,5 +159,7 @@ def main():
             print '\t'.join(row)
 
 if __name__ == '__main__':
+    reload(sys)
+    sys.setdefaultencoding('utf8')
     args = parse_args()
     main()
