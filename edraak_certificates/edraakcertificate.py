@@ -10,10 +10,12 @@ import arabicreshaper
 from bidi.algorithm import get_display
 import re
 from os import path
-from django.core.files.temp import NamedTemporaryFile
-from django.utils import translation
+from tempfile import NamedTemporaryFile
+import gettext
 
-static_dir = path.join(path.dirname(__file__), 'assets')
+PROJ_DIR = path.dirname(path.dirname(__file__))
+ARABIC_DIR = path.join(PROJ_DIR, 'conf/locale/ar/LC_MESSAGES/')
+ASSETS_DIR = path.join(PROJ_DIR, 'edraak_certificates/assets')
 
 fonts = {
     'sahlnaskh-regular.ttf': 'Sahl Naskh Regular',
@@ -21,7 +23,7 @@ fonts = {
 }
 
 for font_file, font_name in fonts.iteritems():
-    font_path = path.join(static_dir, font_file)
+    font_path = path.join(ASSETS_DIR, font_file)
     pdfmetrics.registerFont(TTFont(font_name, font_path, validate=True))
 
 
@@ -108,6 +110,8 @@ class EdraakCertificateDataFetcher(object):
     This helps to detect whether the course is Arabic or not and fetch some course data
     from the edxapp databases.
     """
+    # TODO: Do whatever the view and the utils were doing!
+
     def __getitem__(self, item):
         raise Exception('Not implemented yet!')
 
@@ -126,17 +130,15 @@ class EdraakCertificate(object):
 
         self.ctx = None
 
+        if self.is_english_course():
+            self._ = lambda s: s
+        else:
+            gettext.bindtextdomain('messages', ARABIC_DIR)
+            gettext.textdomain('messages')
+            self._ = gettext.gettext
+
     def is_english_course(self):
         return not contains_rtl_text(self.course_name)
-
-    def _(self, text):
-        """
-        Force the translation language to match the course language instead of the platform language.
-        """
-        forced_language = 'en' if self.is_english_course() else 'ar'
-
-        with translation.override(forced_language):
-            return translation.ugettext(text)
 
     def init_context(self):
         ctx = canvas.Canvas(self.temp_file.name)
@@ -160,7 +162,7 @@ class EdraakCertificate(object):
 
         direction = 'ltr' if self.is_english_course() else 'rtl'
         background_filename = 'certificate_layout_{}.jpg'.format(direction)
-        background_path = path.join(static_dir, background_filename)
+        background_path = path.join(ASSETS_DIR, background_filename)
 
         self.ctx.drawImage(background_path, 0, 0, width, height)
 
@@ -240,7 +242,7 @@ class EdraakCertificate(object):
         if course_org:
             logo = get_organization_logo(course_org, course_id)
             if logo:
-                image = utils.ImageReader(path.join(static_dir, logo))
+                image = utils.ImageReader(path.join(ASSETS_DIR, logo))
 
                 iw, ih = image.getSize()
                 aspect = iw / float(ih)
@@ -261,7 +263,7 @@ class EdraakCertificate(object):
     def add_course_sponsor_logo(self, sponsor, course_id):
         logo = get_organization_logo(sponsor, course_id)
         if logo:
-            image = utils.ImageReader(path.join(static_dir, logo))
+            image = utils.ImageReader(path.join(ASSETS_DIR, logo))
 
             iw, ih = image.getSize()
             aspect = iw / float(ih)
