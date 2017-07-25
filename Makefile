@@ -24,7 +24,7 @@ i18n_push:
 	make ensure_pyenv
 	make pybabel_extract
 
-	tx push -l en -s -r edraak-platform.edraak-platform-theme
+	tx push -l en -s -r edraak-platform.edraak-certificates
 
 
 i18n_pull:
