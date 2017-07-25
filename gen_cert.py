@@ -375,6 +375,7 @@ class CertificateGen(object):
             'stanford': self._generate_stanford_SOA,
             '3_dynamic': self._generate_v3_dynamic_certificate,
             'stanford_cme': self._generate_stanford_cme_certificate,
+            'edraak': self._generate_edraak_certificate,
         }
         # TODO: we should be taking args, kwargs, and passing those on to our callees
         return versionmap[self.template_version](
@@ -657,6 +658,19 @@ class CertificateGen(object):
         )
 
         return (download_uuid, verify_uuid, download_url)
+
+    def _generate_edraak_certificate(
+        self,
+        student_name,
+        download_dir,
+        verify_dir,
+        filename=TARGET_FILENAME,
+        grade=None,
+        designation=None,
+    ):
+        # download_uuid, verify_uuid, download_url
+        download_uuid, verify_uuid, download_url = [1, 2, 3]
+        return download_uuid, verify_uuid, download_url
 
     def _generate_v2_certificate(
         self,

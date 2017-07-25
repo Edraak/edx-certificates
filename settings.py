@@ -52,6 +52,9 @@ CERT_KEY_ID = 'FEF8D954'
 # Specify the default name of the certificate PDF
 CERT_FILENAME = 'Certificate.pdf'
 
+# Edraak Overrides
+USE_EDRAAK_CERTIFICATES = bool(os.getenv('USE_EDRAAK_CERTIFICATES', False))
+
 # Specify these credentials before running the test suite
 # or ensure that your .boto file has write permission
 # to the bucket.
@@ -92,6 +95,7 @@ if os.path.isfile(ENV_ROOT / "env.json"):
     CERT_KEY_ID = ENV_TOKENS.get('CERT_KEY_ID', CERT_KEY_ID)
     CERT_BUCKET = ENV_TOKENS.get('CERT_BUCKET', CERT_BUCKET)
     CERT_FILENAME = ENV_TOKENS.get('CERT_FILENAME', CERT_FILENAME)
+    USE_EDRAAK_CERTIFICATES = ENV_TOKENS.get('USE_EDRAAK_CERTIFICATES', USE_EDRAAK_CERTIFICATES)
     CERT_URL = ENV_TOKENS.get('CERT_URL', '')
     CERT_DOWNLOAD_URL = ENV_TOKENS.get('CERT_DOWNLOAD_URL', "")
     CERT_VERIFY_URL = ENV_TOKENS.get('CERT_VERIFY_URL', "")
@@ -140,5 +144,10 @@ if os.path.isfile(ENV_ROOT / "auth.json"):
 
 TEMPLATE_DIR = os.path.join(CERT_PRIVATE_DIR, TEMPLATE_DATA_SUBDIR)
 
-with open(os.path.join(CERT_PRIVATE_DIR, CERT_DATA_FILE)) as f:
-    CERT_DATA = yaml.load(f.read().decode("utf-8"))
+
+if USE_EDRAAK_CERTIFICATES:
+    from edraak_certificates.utils import EdraakCertificateDataFetcher
+    CERT_DATA = EdraakCertificateDataFetcher()
+else:
+    with open(os.path.join(CERT_PRIVATE_DIR, CERT_DATA_FILE)) as f:
+        CERT_DATA = yaml.load(f.read().decode("utf-8"))
