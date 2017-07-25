@@ -4,4 +4,10 @@
 *.DS_Store
 certs/
 .coverage
+
+# Ignore PyCharm file
 /.idea/
+
+# Translation artifacts
+/conf/locale/en/
+*.pot

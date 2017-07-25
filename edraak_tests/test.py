@@ -1,4 +1,6 @@
 # coding=utf-8
+import os
+
 from edraak_certificates.utils import EdraakCertificateDataFetcher
 
 

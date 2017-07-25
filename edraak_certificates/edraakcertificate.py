@@ -133,7 +133,6 @@ class EdraakCertificate(object):
         """
         Force the translation language to match the course language instead of the platform language.
         """
-        previous_locale = translation.get_language()
         forced_language = 'en' if self.is_english_course() else 'ar'
 
         with translation.override(forced_language):
