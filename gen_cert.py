@@ -36,6 +36,8 @@ from boto.s3.key import Key
 from bidi.algorithm import get_display
 import arabic_reshaper
 
+from edraak_certificates.edraakcertificate import EdraakCertificate, Gettext
+
 from opaque_keys.edx.keys import CourseKey
 
 reportlab.rl_config.warnOnMissingFontGlyphs = 0
@@ -668,7 +670,253 @@ class CertificateGen(object):
         grade=None,
         designation=None,
     ):
-        # download_uuid, verify_uuid, download_url
+        from edraak_certificates.edraakcertificate import (
+            text_to_bidi,
+            contains_rtl_text,
+        )
+
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import inch
+        from reportlab.lib import utils
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.lib.pagesizes import landscape, A4
+        from os import path
+        from tempfile import NamedTemporaryFile
+
+        from settings import ASSETS_DIR
+
+        fonts = {
+            'sahlnaskh-regular.ttf': 'Sahl Naskh Regular',
+            'sahlnaskh-bold.ttf': 'Sahl Naskh Bold',
+        }
+
+        for font_file, font_name in fonts.iteritems():
+            font_path = path.join(ASSETS_DIR, font_file)
+            pdfmetrics.registerFont(TTFont(font_name, font_path, validate=True))
+
+        SIZE = landscape(A4)
+
+        temp_file = NamedTemporaryFile(suffix='-cert.pdf')
+        ctx = canvas.Canvas(temp_file.name)
+        ctx.setPageSize(SIZE)
+        self.ctx = ctx
+
+
+        def bidi_x_axis(x):
+            """
+            Normalize the X-axis and provide the correct RTL/LTR value.
+
+            This helps avoiding hard-coded values for both directions.
+            """
+
+            if not self.cert_data['is_english_course']:
+                return x
+            else:
+                return SIZE[0] - x
+
+        def add_certificate_bg():
+            width, height = SIZE
+
+            direction = 'ltr' if self.cert_data['is_english_course'] else 'rtl'
+            background_filename = 'certificate_layout_{}.jpg'.format(direction)
+            background_path = path.join(ASSETS_DIR, background_filename)
+
+            ctx.drawImage(background_path, 0, 0, width, height)
+
+        def _set_font(size, is_bold):
+            if is_bold:
+                font = 'Sahl Naskh Bold'
+            else:
+                font = 'Sahl Naskh Regular'
+
+            ctx.setFont(font, size)
+            ctx.setFillColorRGB(66 / 255.0, 74 / 255.0, 82 / 255.0)
+
+        def draw_single_line_bidi_text(text, x, y, size, bold=False, max_width=7.494):
+            x *= inch
+            y *= inch
+            size *= inch
+            max_width *= inch
+
+            text = text_to_bidi(text)
+
+            while True:
+                _set_font(size, bold)
+                lines = list(_wrap_text(text, max_width))
+
+                if len(lines) > 1:
+                    size *= 0.9  # reduce font size by 10%
+                else:
+                    if not self.cert_data['is_english_course']:
+                        ctx.drawRightString(bidi_x_axis(x), y, lines[0])
+                    else:
+                        ctx.drawString(bidi_x_axis(x), y, lines[0])
+                    break
+
+        def draw_bidi_center_text(text, x, y, size, bold=False):
+            x *= inch
+            y *= inch
+            size *= inch
+
+            _set_font(size, bold)
+
+            text = text_to_bidi(text)
+
+            ctx.drawCentredString(bidi_x_axis(x), y, text)
+
+        def draw_english_text(text, x, y, size, bold=False, max_width=7.494, lh_factor=1.3):
+            x *= inch
+            y *= inch
+            size *= inch
+            max_width *= inch
+            line_height = size * lh_factor
+            _set_font(size, bold)
+            text = text_to_bidi(text)
+            for line in _wrap_text(text, max_width):
+                ctx.drawString(bidi_x_axis(x), y, line)
+                y -= line_height
+
+        def draw_bidi_text(text, x, y, size, bold=False, max_width=7.494, lh_factor=1.3):
+            x *= inch
+            y *= inch
+            size *= inch
+            max_width *= inch
+            line_height = size * lh_factor
+
+            _set_font(size, bold)
+
+            text = text_to_bidi(text)
+
+            for line in _wrap_text(text, max_width):
+                if not self.cert_data['is_english_course']:
+                    self.ctx.drawRightString(bidi_x_axis(x), y, line)
+                    y -= line_height
+                else:
+                    ctx.drawString(bidi_x_axis(x), y, line)
+                    y -= line_height
+
+        def add_course_org_logo(course_org, course_id):
+            if course_org:
+                logo = self.cert_data['organization_logo']
+                if logo:
+                    image = utils.ImageReader(path.join(ASSETS_DIR, logo))
+
+                    iw, ih = image.getSize()
+                    aspect = iw / float(ih)
+                    height = 1.378 * inch
+                    width = height * aspect
+
+                    rtl_x = 3.519 * inch
+
+                    if not self.cert_data['is_english_course']:
+                        x = rtl_x
+                    else:
+                        x = bidi_x_axis(rtl_x) - width
+
+                    y = 6.444 * inch
+
+                    ctx.drawImage(image, x, y, width, height)
+
+        def add_course_sponsor_logo(sponsor, course_id):
+            logo = self.cert_data['organization_logo']
+            if logo:
+                image = utils.ImageReader(path.join(ASSETS_DIR, logo))
+
+                iw, ih = image.getSize()
+                aspect = iw / float(ih)
+                height = 0.75 * inch
+                width = height * aspect
+
+                rtl_x = 9.25 * inch
+
+                if not self.cert_data['is_english_course']:
+                    x = rtl_x
+                else:
+                    x = bidi_x_axis(rtl_x) - width
+
+                y = 2.45 * inch
+
+                ctx.drawImage(image, x, y, width, height)
+
+        def _wrap_text(text, max_width):
+            same = lambda x: x
+            _reversed = reversed if not self.cert_data['is_english_course'] else same
+
+            words = _reversed(text.split(u' '))
+
+            def de_reverse(text_to_reverse):
+                if not self.cert_data['is_english_course']:
+                    return u' '.join(_reversed(text_to_reverse.split(u' ')))
+                else:
+                    return text_to_reverse
+
+            line = u''
+            for next_word in words:
+                next_width = ctx.stringWidth(line.strip() + u' ' + next_word.strip())
+
+                if next_width >= max_width:
+                    yield de_reverse(line).strip()
+                    line = next_word
+                else:
+                    line += u' ' + next_word.strip()
+
+            if line:
+                yield de_reverse(line).strip()
+
+        x = 10.8
+        add_certificate_bg()
+        add_course_org_logo(self.cert_data['course_org'], self.cert_data['course_id'])
+
+        with Gettext(self.cert_data['language']) as _:
+            draw_bidi_text(_("This is to certify that:"), x, 5.8, size=0.25)
+
+            user_profile_size = 0.42 if contains_rtl_text(student_name) else 0.5
+            draw_single_line_bidi_text(student_name, x, 5.124, size=user_profile_size, bold=True)
+
+            draw_bidi_text(_("Successfully completed:"), x, 4.63, size=0.25)
+
+        course_name_size = 0.31 if contains_rtl_text(self.cert_data['course_name']) else 0.33
+
+        sponsor = self.cert_data['sponsor']
+        if sponsor:
+            draw_single_line_bidi_text(self.cert_data['course_name'], x, 4.1, size=course_name_size, bold=True)
+
+            with Gettext(self.cert_data['language']) as _:
+                draw_bidi_text(_("This course is sponsored by:"), x, 3.5, size=0.25)
+
+            add_course_sponsor_logo(sponsor, self.cert_data['course_id'])
+        else:
+            draw_bidi_text(self.cert_data['course_name'], x, 4.1, size=course_name_size, bold=True)
+            if not self.cert_data['is_english_course']:
+                draw_bidi_text(self.cert_data['description'], x, 3.74, size=0.16)
+            else:
+                draw_english_text(self.cert_data['description'], x, 3.74, size=0.16)
+
+        date_x = 2.01
+
+        with Gettext(self.cert_data['language']) as _:
+            words = _("Course{new_line}Certificate{new_line}of Completion").split('{new_line}')
+
+        for idx, word in enumerate(words):
+            font_size = 0.27
+            line_height = font_size * 1.3
+            y = 6.1 - (idx * line_height)
+
+            draw_bidi_center_text(word, date_x, y, size=font_size, bold=True)
+
+        draw_single_line_bidi_text(self.cert_data['instructor'], x, 1.8, size=0.26, bold=True)
+
+        if not self.cert_data['is_english_course']:
+            draw_bidi_text(self.cert_data['org_disclaimer'], x, 1.44, size=0.16)
+        else:
+            draw_english_text(self.cert_data['org_disclaimer'], x, 1.44, size=0.16)
+
+        draw_bidi_center_text(self.cert_data['end_date'], date_x, 4.82, size=0.27)
+
+        ctx.showPage()
+        ctx.save()
+
         download_uuid, verify_uuid, download_url = [1, 2, 3]
         return download_uuid, verify_uuid, download_url
 

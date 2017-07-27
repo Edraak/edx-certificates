@@ -13,73 +13,27 @@ from os import path
 from tempfile import NamedTemporaryFile
 import gettext
 
-PROJ_DIR = path.dirname(path.dirname(__file__))
-ARABIC_DIR = path.join(PROJ_DIR, 'conf/locale/ar/LC_MESSAGES/')
-ASSETS_DIR = path.join(PROJ_DIR, 'edraak_certificates/assets')
+from settings import ARABIC_DIR
 
-fonts = {
-    'sahlnaskh-regular.ttf': 'Sahl Naskh Regular',
-    'sahlnaskh-bold.ttf': 'Sahl Naskh Bold',
-}
+gettext.bindtextdomain('messages', ARABIC_DIR)
+gettext.textdomain('messages')
 
-for font_file, font_name in fonts.iteritems():
-    font_path = path.join(ASSETS_DIR, font_file)
-    pdfmetrics.registerFont(TTFont(font_name, font_path, validate=True))
+from edraak_certificates.db import CourseOverview, session
 
 
-SIZE = landscape(A4)
+class Gettext():
+    def __init__(self, language):
 
+        self.language = language
 
-def get_organization_logo(organization, course_id):
-    organization = organization.lower()
-    if organization == 'mitx' or organization == 'harvardx' or organization == 'qrf':
-        return 'edx.png'
-    elif organization == u'bayt.com':
-        return 'bayt-logo2-en.png'
-    elif organization == u'qrta':
-        return 'qrta_logo.jpg'
-    elif organization == 'aub':
-        return 'Full-AUB-Seal.jpg'
-    elif organization == "csbe":
-        return 'csbe.png'
-    elif organization == "hcac":
-        return 'HCAC_Logo.png'
-    elif organization == "delftx":
-        return 'delftx.jpg'
-    elif organization == "britishcouncil":
-        return 'british-council.jpg'
-    elif organization == "crescent_petroleum":
-        return 'crescent-petroleum.jpg'
-    elif organization == 'auc':
-        return 'auc.jpg'
-    elif organization == 'pmijo':
-        return 'pmijo.jpg'
-    elif organization == 'qou':
-        return 'qou.png'
-    elif organization == 'moe':
-        return 'moe.png'
-    elif organization == 'mbrcgi':
-        return 'mbrcgi.png'
-    elif organization == 'hsoub':
-        return 'hsoub.png'
-    elif organization == 'psut':
-        return 'psut.png'
-    elif course_id == 'course-v1:Edraak+STEAM101+R1_Q1_2017':
-        return 'auc.jpg'
-    else:
-        return None
+    def __enter__(self):
+        if self.language == 'ar':
+            return gettext.gettext
 
+        return lambda s: s
 
-def get_course_sponsor(course_id):
-    if course_id in (
-            "BritishCouncil/Eng100/T4_2015",
-            "course-v1:BritishCouncil+Eng100+T4_2015",
-            "course-v1:BritishCouncil+Eng2+2016Q3",
-            "course-v1:BritishCouncil+Eng3+Q4-2016"
-    ):
-        return "crescent_petroleum"
-    else:
-        return None
+    def __exit__(self, type, value, traceback):
+        pass
 
 
 def text_to_bidi(text):
@@ -110,260 +64,91 @@ class EdraakCertificateDataFetcher(object):
     This helps to detect whether the course is Arabic or not and fetch some course data
     from the edxapp databases.
     """
-    # TODO: Do whatever the view and the utils were doing!
-
-    def __getitem__(self, item):
-        raise Exception('Not implemented yet!')
-
-
-class EdraakCertificate(object):
-    def __init__(self, user_profile_name, course_id, course_name, course_desc, instructor, course_end_date, course_org=None):
-        self.user_profile_name = user_profile_name
-        self.course_id = course_id
-        self.course_name = course_name
-        self.course_desc = course_desc
-        self.instructor = instructor
-        self.course_end_date = course_end_date
-        self.course_org = course_org
-
-        self.temp_file = NamedTemporaryFile(suffix='-cert.pdf')
-
-        self.ctx = None
-
-        if self.is_english_course():
-            self._ = lambda s: s
+    @staticmethod
+    def get_organization_logo(organization, course_id):
+        org_lower = organization.lower()
+        if org_lower == 'mitx' or org_lower == 'harvardx' or org_lower == 'qrf':
+            return 'edx.png'
+        elif org_lower == u'bayt.com':
+            return 'bayt-logo2-en.png'
+        elif org_lower == u'qrta':
+            return 'qrta_logo.jpg'
+        elif org_lower == 'aub':
+            return 'Full-AUB-Seal.jpg'
+        elif org_lower == "csbe":
+            return 'csbe.png'
+        elif org_lower == "hcac":
+            return 'HCAC_Logo.png'
+        elif org_lower == "delftx":
+            return 'delftx.jpg'
+        elif org_lower == "britishcouncil":
+            return 'british-council.jpg'
+        elif org_lower == "crescent_petroleum":
+            return 'crescent-petroleum.jpg'
+        elif org_lower == 'auc':
+            return 'auc.jpg'
+        elif org_lower == 'pmijo':
+            return 'pmijo.jpg'
+        elif org_lower == 'qou':
+            return 'qou.png'
+        elif org_lower == 'moe':
+            return 'moe.png'
+        elif org_lower == 'mbrcgi':
+            return 'mbrcgi.png'
+        elif org_lower == 'hsoub':
+            return 'hsoub.png'
+        elif org_lower == 'psut':
+            return 'psut.png'
+        elif course_id == 'course-v1:Edraak+STEAM101+R1_Q1_2017':
+            return 'auc.jpg'
         else:
-            gettext.bindtextdomain('messages', ARABIC_DIR)
-            gettext.textdomain('messages')
-            self._ = gettext.gettext
+            return None
 
-    def is_english_course(self):
-        return not contains_rtl_text(self.course_name)
-
-    def init_context(self):
-        ctx = canvas.Canvas(self.temp_file.name)
-        ctx.setPageSize(SIZE)
-        self.ctx = ctx
-
-    def bidi_x_axis(self, x):
-        """
-        Normalize the X-axis and provide the correct RTL/LTR value.
-
-        This helps avoiding hard-coded values for both directions.
-        """
-
-        if not self.is_english_course():
-            return x
+    @staticmethod
+    def get_course_sponsor(course_id):
+        if course_id in (
+                "BritishCouncil/Eng100/T4_2015",
+                "course-v1:BritishCouncil+Eng100+T4_2015",
+                "course-v1:BritishCouncil+Eng2+2016Q3",
+                "course-v1:BritishCouncil+Eng3+Q4-2016"
+        ):
+            return "crescent_petroleum"
         else:
-            return SIZE[0] - x
+            return None
 
-    def add_certificate_bg(self):
-        width, height = SIZE
+    def is_english_course(self, course_name):
+        return not contains_rtl_text(course_name)
 
-        direction = 'ltr' if self.is_english_course() else 'rtl'
-        background_filename = 'certificate_layout_{}.jpg'.format(direction)
-        background_path = path.join(ASSETS_DIR, background_filename)
-
-        self.ctx.drawImage(background_path, 0, 0, width, height)
-
-    def _set_font(self, size, is_bold):
-        if is_bold:
-            font = 'Sahl Naskh Bold'
-        else:
-            font = 'Sahl Naskh Regular'
-
-        self.ctx.setFont(font, size)
-        self.ctx.setFillColorRGB(66 / 255.0, 74 / 255.0, 82 / 255.0)
-
-    def draw_single_line_bidi_text(self, text, x, y, size, bold=False, max_width=7.494):
-        x *= inch
-        y *= inch
-        size *= inch
-        max_width *= inch
-
-        text = text_to_bidi(text)
-
-        while True:
-            self._set_font(size, bold)
-            lines = list(self._wrap_text(text, max_width))
-
-            if len(lines) > 1:
-                size *= 0.9  # reduce font size by 10%
+    def course_org_disclaimer(self, course_org, language):
+        with Gettext(language) as _:
+            if course_org == 'MITX':
+                return _("A course of study offered by Edraak with cooperation from MITx. "
+                              "The learning experience has been supervised and managed by the course team.")
             else:
-                if not self.is_english_course():
-                    self.ctx.drawRightString(self.bidi_x_axis(x), y, lines[0])
-                else:
-                    self.ctx.drawString(self.bidi_x_axis(x), y, lines[0])
-                break
-
-    def draw_bidi_center_text(self, text, x, y, size, bold=False):
-        x *= inch
-        y *= inch
-        size *= inch
-
-        self._set_font(size, bold)
-
-        text = text_to_bidi(text)
-
-        self.ctx.drawCentredString(self.bidi_x_axis(x), y, text)
-
-    def draw_english_text(self, text, x, y, size, bold=False, max_width=7.494, lh_factor=1.3):
-        x *= inch
-        y *= inch
-        size *= inch
-        max_width *= inch
-        line_height = size * lh_factor
-        self._set_font(size, bold)
-        text = text_to_bidi(text)
-        for line in self._wrap_text(text, max_width):
-            self.ctx.drawString(self.bidi_x_axis(x), y, line)
-            y -= line_height
-
-    def draw_bidi_text(self, text, x, y, size, bold=False, max_width=7.494, lh_factor=1.3):
-        x *= inch
-        y *= inch
-        size *= inch
-        max_width *= inch
-        line_height = size * lh_factor
-
-        self._set_font(size, bold)
-
-        text = text_to_bidi(text)
-
-        for line in self._wrap_text(text, max_width):
-            if not self.is_english_course():
-                self.ctx.drawRightString(self.bidi_x_axis(x), y, line)
-                y -= line_height
-            else:
-                self.ctx.drawString(self.bidi_x_axis(x), y, line)
-                y -= line_height
-
-    def add_course_org_logo(self, course_org, course_id):
-        if course_org:
-            logo = get_organization_logo(course_org, course_id)
-            if logo:
-                image = utils.ImageReader(path.join(ASSETS_DIR, logo))
-
-                iw, ih = image.getSize()
-                aspect = iw / float(ih)
-                height = 1.378 * inch
-                width = height * aspect
-
-                rtl_x = 3.519 * inch
-
-                if not self.is_english_course():
-                    x = rtl_x
-                else:
-                    x = self.bidi_x_axis(rtl_x) - width
-
-                y = 6.444 * inch
-
-                self.ctx.drawImage(image, x, y, width, height)
-
-    def add_course_sponsor_logo(self, sponsor, course_id):
-        logo = get_organization_logo(sponsor, course_id)
-        if logo:
-            image = utils.ImageReader(path.join(ASSETS_DIR, logo))
-
-            iw, ih = image.getSize()
-            aspect = iw / float(ih)
-            height = 0.75 * inch
-            width = height * aspect
-
-            rtl_x = 9.25 * inch
-
-            if not self.is_english_course():
-                x = rtl_x
-            else:
-                x = self.bidi_x_axis(rtl_x) - width
-
-            y = 2.45 * inch
-
-            self.ctx.drawImage(image, x, y, width, height)
-
-    def _wrap_text(self, text, max_width):
-        same = lambda x: x
-        _reversed = reversed if not self.is_english_course() else same
-
-        words = _reversed(text.split(u' '))
-
-        def de_reverse(text_to_reverse):
-            if not self.is_english_course():
-                return u' '.join(_reversed(text_to_reverse.split(u' ')))
-            else:
-                return text_to_reverse
-
-        line = u''
-        for next_word in words:
-            next_width = self.ctx.stringWidth(line.strip() + u' ' + next_word.strip())
-
-            if next_width >= max_width:
-                yield de_reverse(line).strip()
-                line = next_word
-            else:
-                line += u' ' + next_word.strip()
-
-        if line:
-            yield de_reverse(line).strip()
-
-    def save(self):
-        self.ctx.showPage()
-        self.ctx.save()
-
-    def course_org_disclaimer(self):
-        if self.course_org == 'MITX':
-            return self._("A course of study offered by Edraak with cooperation from MITx. "
-                          "The learning experience has been supervised and managed by the course team.")
-        else:
-            return self._("A course of study offered by Edraak. The learning experience has been supervised and "
+                return _("A course of study offered by Edraak. The learning experience has been supervised and "
                           "managed by the course team.")
 
-    def generate_and_save(self):
-        self.init_context()
+    def get_course(self, course_key):
+        return session.query(CourseOverview).get(course_key)
 
-        x = 10.8
-        self.add_certificate_bg()
-        self.add_course_org_logo(self.course_org, self.course_id)
+    def get(self, item, default=None):
+        return self[item]
 
-        self.draw_bidi_text(self._("This is to certify that:"), x, 5.8, size=0.25)
+    def __getitem__(self, item):
+        # raise Exception('Not implemented yet!')
+        course = self.get_course(item)
 
-        user_profile_size = 0.42 if contains_rtl_text(self.user_profile_name) else 0.5
-        self.draw_single_line_bidi_text(self.user_profile_name, x, 5.124, size=user_profile_size, bold=True)
+        language = 'en' if self.is_english_course(course.display_name) else 'ar'
 
-        self.draw_bidi_text(self._("Successfully completed:"), x, 4.63, size=0.25)
-
-        course_name_size = 0.31 if contains_rtl_text(self.course_name) else 0.33
-
-        sponsor = get_course_sponsor(self.course_id)
-        if sponsor:
-            self.draw_single_line_bidi_text(self.course_name, x, 4.1, size=course_name_size, bold=True)
-            self.draw_bidi_text(self._("This course is sponsored by:"), x, 3.5, size=0.25)
-            self.add_course_sponsor_logo(sponsor, self.course_id)
-        else:
-            self.draw_bidi_text(self.course_name, x, 4.1, size=course_name_size, bold=True)
-            if not self.is_english_course():
-                self.draw_bidi_text(self.course_desc, x, 3.74, size=0.16)
-            else:
-                self.draw_english_text(self.course_desc, x, 3.74, size=0.16)
-
-        date_x = 2.01
-
-        words = self._("Course{new_line}Certificate{new_line}of Completion").split('{new_line}')
-
-        for idx, word in enumerate(words):
-            font_size = 0.27
-            line_height = font_size * 1.3
-            y = 6.1 - (idx * line_height)
-
-            self.draw_bidi_center_text(word, date_x, y, size=font_size, bold=True)
-
-        self.draw_single_line_bidi_text(self.instructor, x, 1.8, size=0.26, bold=True)
-
-        if not self.is_english_course():
-            self.draw_bidi_text(self.course_org_disclaimer(), x, 1.44, size=0.16)
-        else:
-            self.draw_english_text(self.course_org_disclaimer(), x, 1.44, size=0.16)
-
-        self.draw_bidi_center_text(self.course_end_date, date_x, 4.82, size=0.27)
-
-        self.save()
+        return {
+            'course': course,
+            'organization_logo': self.get_organization_logo(course.org, course.id),
+            'sponsor': self.get_course_sponsor(course.id),
+            'language': language,
+            'instructor': '',
+            'is_english_course': self.is_english_course(course.display_name),
+            'organization_disclaimer': self.course_org_disclaimer(course.display_org_with_default, language),
+            'LONG_ORG': course.display_org_with_default,
+            'LONG_COURSE': course.display_name,
+            'VERSION': 'edraak',
+        }

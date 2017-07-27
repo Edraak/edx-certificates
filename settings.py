@@ -16,6 +16,9 @@ ROOT_PATH = path(__file__).dirname()
 REPO_PATH = ROOT_PATH
 ENV_ROOT = REPO_PATH.dirname()
 
+ARABIC_DIR = path.join(REPO_PATH, 'conf/locale/ar/LC_MESSAGES/')
+ASSETS_DIR = path.join(REPO_PATH, 'edraak_certificates/assets')
+
 # Override CERT_PRIVATE_DIR if you have have private templates, fonts, etc.
 CERT_PRIVATE_DIR = REPO_PATH
 
@@ -54,6 +57,8 @@ CERT_FILENAME = 'Certificate.pdf'
 
 # Edraak Overrides
 USE_EDRAAK_CERTIFICATES = bool(os.getenv('USE_EDRAAK_CERTIFICATES', False))
+
+EDXAPP_DATABASE_URL = 'sqlite:///db.sqlite3'
 
 # Specify these credentials before running the test suite
 # or ensure that your .boto file has write permission
@@ -137,6 +142,7 @@ if os.path.isfile(ENV_ROOT / "auth.json"):
     CERT_AWS_KEY = ENV_TOKENS.get('CERT_AWS_KEY', CERT_AWS_KEY)
     CERT_AWS_ID = ENV_TOKENS.get('CERT_AWS_ID', CERT_AWS_ID)
     DEFAULT_ORG = ENV_TOKENS.get('DEFAULT_ORG', DEFAULT_ORG)
+    EDXAPP_DATABASE_URL = ENV_TOKENS.get('EDXAPP_DATABASE_URL', EDXAPP_DATABASE_URL)
 
 
 # Use the custom CERT_PRIVATE_DIR for paths to the
